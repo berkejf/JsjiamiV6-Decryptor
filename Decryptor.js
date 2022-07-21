@@ -826,11 +826,11 @@ function getStatementsType(jsArr) {
 					// var _0x1d2c53='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
 					"CharSetString": /var (_0x[0-9a-f]{4,6}|[a-z0-9]{1,3})='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789\+\/=';/.test(jsStr),
 					// '%'+('00'+_0x1f82f7['charCodeAt']
-					"ZeroPlusCharCodeAt": /'%'\+\('00'\+(_0x[0-9a-f]{4,6}|[a-z0-9]{1,3})\['charCodeAt']/.test(jsStr),
+					"ZeroPlusCharCodeAt": /'%'\+\('00'\+(_0x[0-9a-f]{4,6}|[a-z0-9]{1,3})(\['charCodeAt'\]|\.charCodeAt)\(/.test(jsStr),
 					// _0x53656e['charCodeAt'](_0x578a24%_0x53656e['length']))%0x100;
-					"CharCodeAtLength": /(_0x[0-9a-f]{4,6}|[a-z0-9]{1,3})\['charCodeAt']\((_0x[0-9a-f]{4,6}|[a-z0-9]{1,3})%(_0x[0-9a-f]{4,6}|[a-z0-9]{1,3})\['length']\)\)%0x100;/.test(jsStr),
+					"CharCodeAtLength": /(_0x[0-9a-f]{4,6}|[a-z0-9]{1,3})(\['charCodeAt'\]|\.charCodeAt)\((_0x[0-9a-f]{4,6}|[a-z0-9]{1,3})%(_0x[0-9a-f]{4,6}|[a-z0-9]{1,3})(\['length'\]|\.length)\)\)%0x100;/.test(jsStr),
 					// +=String['fromCharCode'](
-					"PlusStringFromCharCode": /\+=String\['fromCharCode']\(/.test(jsStr)
+					"PlusStringFromCharCode": /\+=String(\['fromCharCode'\]|\.fromCharCode)\(/.test(jsStr),
 				};
 				// fs.appendFileSync("test.txt", JSON.stringify(schemas) + "\n");
 				if (
@@ -1068,6 +1068,30 @@ function findAndDecryptCodeBlock(jsArr, isShowProgress) {
 		return jsStr;
 	});
 }
+
+/**
+ * 转换代码块中使用加密对象的dot方法为square backet方法
+ * @param jsStr {string} 所在代码块的包含加密对象的dot方法调用
+ * @param decryptorObjName {string} 调用加密对象的名称
+ * @returns {string} 转换结果
+ */
+
+function normalizedObjAccess(jsStr, decryptorObjName) {
+    let transRes = transStr(jsStr);
+
+	let startPos = Number.POSITIVE_INFINITY;
+	while ((startPos === Number.POSITIVE_INFINITY || startPos - 1 >= 0) && (startPos = transRes.lastSearchOf(new RegExp(decryptorObjName.replace(/\$/g, "\\$") + "\\..+?"), startPos - 1)
+	) !== -1) {
+        
+        let startPropIdx = transRes.indexOf(".", startPos) + 1,
+            endPropIdx = transRes.substring(startPropIdx).search(/[^A-Za-z0-9]/) + startPropIdx,
+            propName = jsStr.slice(startPropIdx, endPropIdx);
+
+	    jsStr = jsStr.replaceWithStr(startPos, endPropIdx, decryptorObjName + "['" + propName +"']" );
+		
+	}
+    return jsStr;
+}
 function decryptCodeBlockArr(jsArr, isShowProgress) {
 	if (isShowProgress) {
 		logger.logWithProgress("解除代码块加密", 0, jsArr.length);
@@ -1080,6 +1104,11 @@ function decryptCodeBlockArr(jsArr, isShowProgress) {
 		let transStrRes;
 		// 识别是否添加括号（二叉树？不！它超出了我的能力范围。）
 		jsArr = jsArr.slice(1).map(function (jsStr) {
+                        
+            if (jsStr.indexOf(decryptorObjName+".") !== -1) {
+                jsStr = normalizedObjAccess(jsStr, decryptorObjName);
+            }
+            
 			transStrRes = transStr(jsStr);
 
 			let decryptorPos = Number.POSITIVE_INFINITY;
